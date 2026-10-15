@@ -1,0 +1,5 @@
+target/
+*.png
+/pkgbuild/pkg/
+/pkgbuild/src/
+*.pkg.tar.zst

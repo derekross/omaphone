@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 # Screenshots of Phone at the size it gets on the Pixel 7 Pro (456x900
 # logical), in a headless Weston's kiosk shell inside a Docker container:
-# never on your own desktop. Fictional demo data (omatel-demo-data) is
+# never on your own desktop. Fictional demo data (examples/demo-data.rs) is
 # written inside the container; no agent runs there, so the call pages
 # are driven by the script's fake-incoming and fake-call steps.
 # Writes target/ui-shots/omaphone/*.png. SIZE=WxH changes the size.
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/.."
 IMAGE=${UI_IMAGE:-omacam-uitest:2}
-cargo build --release --locked -p omaphone -p omatel-mock --bin omaphone --bin omatel-demo-data
+cargo build --release --locked --bin omaphone --example demo-data
 out=target/ui-shots/omaphone
 rm -rf "$out"; mkdir -p "$out"; chmod 777 "$out"
 size=${SIZE:-456x900}
 docker run --rm --user "$(id -u):$(id -g)" -e W="${size%x*}" -e H="${size#*x}" \
   -v "$PWD/target/release/omaphone:/omaphone:ro" \
-  -v "$PWD/target/release/omatel-demo-data:/omatel-demo-data:ro" \
+  -v "$PWD/target/release/examples/demo-data:/omatel-demo-data:ro" \
   -v "$PWD/$out:/out" "$IMAGE" bash -c '
   export XDG_RUNTIME_DIR=/tmp/rt HOME=/tmp/home XDG_DATA_HOME=/tmp/data XDG_CONFIG_HOME=/tmp/config
   export LANG=en_US.UTF-8 TZ=UTC OMATEL_REGION=US
   mkdir -m 700 -p $XDG_RUNTIME_DIR $HOME
-  /omatel-demo-data >/dev/null
+  /omatel-demo-data $XDG_DATA_HOME >/dev/null
   # No session bus and no agent: the app shows its "service is not running" banner.
   weston --backend=headless --shell=kiosk --width=$W --height=$H \
     --socket=wayland-9 --idle-time=0 >/tmp/weston.log 2>&1 &

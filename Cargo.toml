@@ -1,27 +1,44 @@
 [package]
 name = "omaphone"
 description = "Phone: dialpad, call log, favorites, contacts and the in-call screen for Omarchy Mobile"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-rust-version.workspace = true
+version = "0.2.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+rust-version = "1.87"
+repository = "https://github.com/derekross/omaphone"
 
-[lints]
-workspace = true
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
 
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"
+
+# omatel's shared crates, pinned to a release tag: an API change there
+# needs a new omatel tag and a bump here (and in Cargo.lock).
 [dependencies]
-omatel-api.workspace = true
-omatel-store.workspace = true
-omatel-contacts.workspace = true
-omatel-theme.workspace = true
-gtk4.workspace = true
-libadwaita.workspace = true
-zbus.workspace = true
-futures-util.workspace = true
-async-channel.workspace = true
-anyhow.workspace = true
-clap.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
-tracing-journald.workspace = true
-chrono.workspace = true
+omatel-api = { git = "https://github.com/derekross/omatel", tag = "v0.2.0" }
+omatel-store = { git = "https://github.com/derekross/omatel", tag = "v0.2.0" }
+omatel-contacts = { git = "https://github.com/derekross/omatel", tag = "v0.2.0" }
+omatel-theme = { git = "https://github.com/derekross/omatel", tag = "v0.2.0" }
+gtk4 = { version = "0.11", features = ["v4_14"] }
+libadwaita = { version = "0.9", features = ["v1_5"] }
+zbus = "5"
+futures-util = "0.3"
+async-channel = "2"
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-journald = "0.3"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+# Fictional demo data for the screenshots (examples/demo-data.rs).
+[dev-dependencies]
+omatel-mock = { git = "https://github.com/derekross/omatel", tag = "v0.2.0" }
+omatel-store = { git = "https://github.com/derekross/omatel", tag = "v0.2.0" }
+anyhow = "1"
+
+[profile.release]
+opt-level = 3
+# Stripped by the linker, so a cross-built binary needs no aarch64 strip.
+strip = true
