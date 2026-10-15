@@ -1,0 +1,24 @@
+omaphone is released under the GNU General Public License, version 3 or (at
+your option) any later version; see LICENSE.
+
+omaphone began in the omatel repository (https://github.com/derekross/omatel)
+and was moved here with its history. It uses omatel's crates
+(GPL-3.0-or-later) as dependencies. One of them, omatel-theme, contains
+theme support adapted from gliff (https://github.com/omacom/gliff),
+Copyright (c) 2026 Kevin McConnell, under the MIT license; that crate's
+source carries the license notice, and omatel's NOTICE has its full text.
+
+Parts are taken from omacam (https://github.com/derekross/omacam, the same
+author, GPL-3.0-or-later): the journal logging set-up, the window
+screenshots for tests, and bin/cross.
+
+Phone follows the behavior and layout of AOSP's Dialer app; no AOSP code
+is included. The icons are original artwork.
+
+The omaphone binary links these Rust crates statically, each under its own
+license: omatel's crates (GPL-3.0-or-later; omatel-theme partly MIT), gtk4,
+gdk4, gsk4, glib, gio, libadwaita and the other gtk-rs crates (MIT), zbus
+and zvariant (MIT), rusqlite (MIT), phonenumber (Apache-2.0), chrono (MIT
+OR Apache-2.0), serde (MIT OR Apache-2.0), and the crates listed in
+Cargo.lock. It links GTK and libadwaita (LGPL-2.1-or-later) and SQLite
+(public domain) dynamically.

@@ -1,0 +1,38 @@
+# Maintainer: Derek Ross <derekross@gmail.com>
+#
+# Builds omaphone from this checkout. Omarchy Mobile's packages/omaphone builds a
+# pinned release the same way.
+pkgname=omaphone
+pkgver=$(sed -n 's/^version = "\(.*\)"/\1/p' "$startdir/../Cargo.toml" | head -1)
+pkgrel=1
+pkgdesc="Phone: dialpad with smart dial, call log, favorites, contacts and the in-call screen"
+arch=('aarch64' 'x86_64')
+url="https://github.com/derekross/omaphone"
+license=('GPL-3.0-or-later' 'MIT')
+depends=('omatel-agent>=0.2.0' 'gcc-libs' 'glib2' 'glibc' 'gtk4>=4.14' 'libadwaita>=1.5' 'sqlite' 'hicolor-icon-theme')
+makedepends=('cargo' 'pkgconf')
+install=omaphone.install
+options=('!debug' '!lto' '!strip')
+source=()
+sha256sums=()
+
+# bin/cross package sets PREBUILT to the directory of the binary it
+# cross-compiled for aarch64 on an x86_64 machine; otherwise this builds
+# natively.
+build() {
+  [[ -n ${PREBUILT:-} ]] && return 0
+  cd "$startdir/.."
+  ./bin/build
+}
+
+package() {
+  cd "$startdir/.."
+  install -Dm755 "${PREBUILT:-target/release}/omaphone" "$pkgdir/usr/bin/omaphone"
+  install -Dm644 data/org.omamobile.Phone.desktop "$pkgdir/usr/share/applications/org.omamobile.Phone.desktop"
+  install -Dm644 data/org.omamobile.Phone.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/org.omamobile.Phone.svg"
+  install -Dm644 data/org.omamobile.Contacts.desktop "$pkgdir/usr/share/applications/org.omamobile.Contacts.desktop"
+  install -Dm644 data/org.omamobile.Contacts.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/org.omamobile.Contacts.svg"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
