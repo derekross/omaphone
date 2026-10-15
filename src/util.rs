@@ -38,6 +38,32 @@ pub fn parse_dial_uri(uri: &str) -> Option<String> {
     (!out.trim_start_matches('+').is_empty()).then_some(out)
 }
 
+/// The file a command-line argument names when it is a vCard to import:
+/// a `file://` URI (as file managers pass it), or a path ending in `.vcf`
+/// or `.vcard`. None for `tel:` links and numbers.
+pub fn vcard_path(arg: &str) -> Option<std::path::PathBuf> {
+    let s = arg.trim();
+    let path = match s.get(..7) {
+        Some(p) if p.eq_ignore_ascii_case("file://") => {
+            // file:///path or file://localhost/path
+            let rest = &s[7..];
+            let rest = rest.strip_prefix("localhost").unwrap_or(rest);
+            if !rest.starts_with('/') {
+                return None;
+            }
+            percent_decode(rest.split(['?', '#']).next().unwrap_or(""))
+        }
+        _ => {
+            let lower = s.to_ascii_lowercase();
+            if !(lower.ends_with(".vcf") || lower.ends_with(".vcard")) || lower.contains("://") {
+                return None;
+            }
+            s.to_string()
+        }
+    };
+    Some(std::path::PathBuf::from(path))
+}
+
 fn percent_decode(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
@@ -157,6 +183,31 @@ pub fn call_status(state: &str, talked_secs: Option<i64>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vcard_paths_from_arguments() {
+        use std::path::PathBuf;
+        assert_eq!(
+            vcard_path("file:///home/user/Downloads/My%20contacts.vcf"),
+            Some(PathBuf::from("/home/user/Downloads/My contacts.vcf"))
+        );
+        assert_eq!(
+            vcard_path("file://localhost/tmp/a.vcf"),
+            Some(PathBuf::from("/tmp/a.vcf"))
+        );
+        assert_eq!(
+            vcard_path("/tmp/contacts.VCF"),
+            Some(PathBuf::from("/tmp/contacts.VCF"))
+        );
+        assert_eq!(
+            vcard_path("cards.vcard"),
+            Some(PathBuf::from("cards.vcard"))
+        );
+        assert_eq!(vcard_path("tel:+12025550100"), None);
+        assert_eq!(vcard_path("+12025550100"), None);
+        assert_eq!(vcard_path("https://example.com/a.vcf"), None);
+        assert_eq!(vcard_path("file://otherhost/a.vcf"), None);
+    }
     use chrono::NaiveDate;
 
     fn at(d: u32, h: u32, m: u32) -> NaiveDateTime {

@@ -1,7 +1,7 @@
 [package]
 name = "omaphone"
 description = "Phone: dialpad, call log, favorites, contacts and the in-call screen for Omarchy Mobile"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "GPL-3.0-or-later"
 rust-version = "1.87"
@@ -16,10 +16,10 @@ undocumented_unsafe_blocks = "warn"
 # omatel's shared crates, pinned to a release tag: an API change there
 # needs a new omatel tag and a bump here (and in Cargo.lock).
 [dependencies]
-omatel-api = { git = "https://github.com/derekross/omatel", tag = "v0.2.0" }
-omatel-store = { git = "https://github.com/derekross/omatel", tag = "v0.2.0" }
-omatel-contacts = { git = "https://github.com/derekross/omatel", tag = "v0.2.0" }
-omatel-theme = { git = "https://github.com/derekross/omatel", tag = "v0.2.0" }
+omatel-api = { git = "https://github.com/derekross/omatel", tag = "v0.2.1" }
+omatel-store = { git = "https://github.com/derekross/omatel", tag = "v0.2.1" }
+omatel-contacts = { git = "https://github.com/derekross/omatel", tag = "v0.2.1" }
+omatel-theme = { git = "https://github.com/derekross/omatel", tag = "v0.2.1" }
 gtk4 = { version = "0.11", features = ["v4_14"] }
 libadwaita = { version = "0.9", features = ["v1_5"] }
 zbus = "5"
@@ -34,8 +34,8 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 
 # Fictional demo data for the screenshots (examples/demo-data.rs).
 [dev-dependencies]
-omatel-mock = { git = "https://github.com/derekross/omatel", tag = "v0.2.0" }
-omatel-store = { git = "https://github.com/derekross/omatel", tag = "v0.2.0" }
+omatel-mock = { git = "https://github.com/derekross/omatel", tag = "v0.2.1" }
+omatel-store = { git = "https://github.com/derekross/omatel", tag = "v0.2.1" }
 anyhow = "1"
 
 [profile.release]

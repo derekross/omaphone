@@ -26,7 +26,8 @@ omatel's shared crates, pinned to an omatel release tag.
   are tabs.
 - Contacts: search, a contact page, an editor (name, numbers with labels,
   emails, a note, favorite), importing and exporting `.vcf` files, and
-  blocking.
+  blocking. Import takes Google's and Apple's exports and merges
+  duplicates (see below).
 - The in-call screen: a call timer, mute, speaker, a keypad for touch
   tones, and hang up. The answer screen offers Answer, Decline and Reply
   with a message.
@@ -61,10 +62,60 @@ omaphone tel:+12025550100   # the dialpad with a number filled in (never dials b
 omaphone --contacts         # also --recents, --favorites, --keypad
 omaphone --add NUMBER       # a new contact with this number
 omaphone --import FILE.vcf
+omaphone FILE.vcf           # asks first, as when you open a .vcf from Files or a browser
 ```
+
+Phone is registered for `text/vcard`, so opening a downloaded `.vcf`
+offers to import it.
 
 Without the agent the app still shows its data, with a banner saying the
 service isn't running.
+
+## Import contacts from Google or Apple
+
+Get a `.vcf` file, copy it to the phone, then tap **Import contacts…** on
+the Contacts tab (or in the menu), or open the file from Files or your
+browser's downloads.
+
+- **Google Contacts**: on contacts.google.com, select the contacts (or
+  none, for all), choose **Export**, pick **vCard (for iOS Contacts)**
+  and **Export**.
+- **iCloud**: on icloud.com/contacts, select the contacts (Ctrl+A for
+  all), open the **⋯** menu and choose **Export vCard**.
+- **Mac**: in Contacts, select the contacts and choose **File > Export >
+  Export vCard**.
+
+A card joins a contact already here when it has the same UID, or the same
+name and a shared number; its numbers, emails and other details are
+added, and nothing is lost. Phone then says how many contacts were added,
+merged and skipped. Custom labels (`Boat`, `Studio`) and photos are kept.
+
+## Contacts with khard, scripts and AI agents
+
+Contacts are plain vCard files, one per contact, in
+`~/.local/share/contacts/<book>/` (a vdir); Phone and Messages pick up
+changes other tools make. To use [khard](https://github.com/lucc/khard)
+on them, add to `~/.config/khard/khard.conf` (Phone never writes it):
+
+```
+[addressbooks]
+[[default]]
+path = ~/.local/share/contacts/default/
+```
+
+or, for every book (recent khard):
+
+```
+[addressbooks]
+[[contacts]]
+path = ~/.local/share/contacts/*
+type = discover
+```
+
+Scripts and AI agents can read the `.vcf` files directly. To change one,
+write a new file and rename it over the old one. If Phone has that
+contact open, it says "This contact changed elsewhere" and shows the new
+version instead of overwriting it.
 
 ## Where things are kept
 

@@ -16,7 +16,8 @@ use gtk4 as gtk;
 #[command(name = "omaphone", version, about = "Phone for Omarchy Mobile")]
 pub struct Cli {
     /// A `tel:` or `callto:` URI (or a number): opens the dialpad with it
-    /// filled in. Nothing is dialled until you press call.
+    /// filled in. Nothing is dialled until you press call. A `.vcf` file
+    /// (a path or a `file://` URI) offers to import its contacts.
     pub uri: Option<String>,
     /// Open on the contacts tab.
     #[arg(long)]

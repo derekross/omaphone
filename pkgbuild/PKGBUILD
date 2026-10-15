@@ -9,7 +9,7 @@ pkgdesc="Phone: dialpad with smart dial, call log, favorites, contacts and the i
 arch=('aarch64' 'x86_64')
 url="https://github.com/derekross/omaphone"
 license=('GPL-3.0-or-later' 'MIT')
-depends=('omatel-agent>=0.2.0' 'gcc-libs' 'glib2' 'glibc' 'gtk4>=4.14' 'libadwaita>=1.5' 'sqlite' 'hicolor-icon-theme')
+depends=('omatel-agent>=0.2.1' 'gcc-libs' 'glib2' 'glibc' 'gtk4>=4.14' 'libadwaita>=1.5' 'sqlite' 'hicolor-icon-theme')
 makedepends=('cargo' 'pkgconf')
 install=omaphone.install
 options=('!debug' '!lto' '!strip')

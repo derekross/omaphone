@@ -125,7 +125,7 @@ impl Ui {
             for p in &c.phones {
                 let row = adw::ActionRow::builder()
                     .title(number::display(&p.number, &self.region))
-                    .subtitle(p.kind.label())
+                    .subtitle(glib::markup_escape_text(&p.label_text()).as_str())
                     .activatable(true)
                     .build();
                 let msg = icon_button("chat-message-new-symbolic", "Message");
@@ -216,11 +216,24 @@ impl Ui {
             if let Some(mut c) = c {
                 c.set_starred(b.is_active());
                 let r = ui.book.borrow_mut().save(&c);
-                if let Err(e) = r {
-                    tracing::warn!(error = %e, "cannot save contact");
-                    ui.toast("Couldn't save the contact");
+                match r {
+                    Ok(()) => ui.refresh_contacts_everywhere(),
+                    Err(omatel_contacts::Error::Conflict) => {
+                        tracing::info!("contact changed elsewhere; not saved");
+                        ui.toast("This contact changed elsewhere");
+                        ui.book.borrow_mut().reload_if_changed();
+                        ui.refresh_contacts_everywhere();
+                        let ui = ui.clone();
+                        let uid = uid_s.clone();
+                        // Not from inside the toggle's own handler.
+                        glib::idle_add_local_once(move || ui.reopen_contact(&uid));
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "cannot save contact");
+                        ui.toast("Couldn't save the contact");
+                        ui.refresh_contacts_everywhere();
+                    }
                 }
-                ui.refresh_contacts_everywhere();
             }
         });
         let edit = gtk::Button::builder()
@@ -234,6 +247,20 @@ impl Ui {
         header.pack_end(&star);
         let p = page(&name, &content, &header);
         self.nav.push(&p);
+    }
+
+    /// Replace the open contact page with a fresh one (after the card
+    /// changed on disk), or go back to the list when it is gone.
+    fn reopen_contact(self: &Rc<Self>, uid: &str) {
+        let open = self.open_contact.borrow().clone();
+        if open.as_deref() == Some(uid) {
+            self.nav.pop();
+        }
+        if self.book.borrow().get(uid).is_some() {
+            self.show_contact(uid);
+        } else {
+            self.nav.pop_to_tag("root");
+        }
     }
 
     fn confirm_delete(self: &Rc<Self>, uid: &str) {
@@ -276,6 +303,7 @@ impl Ui {
             contact.phones.push(Phone {
                 number: n,
                 kind: PhoneKind::Mobile,
+                label: String::new(),
             });
         }
         let content = gtk::Box::new(gtk::Orientation::Vertical, 18);
@@ -390,36 +418,40 @@ impl Ui {
         save.connect_clicked(move |_| {
             let mut c: Contact = existing.clone().unwrap_or_else(|| Contact::new(""));
             c.set_name(&name.text());
+            let old_phones = std::mem::take(&mut c.phones);
             c.phones = phone_rows
                 .borrow()
                 .iter()
                 .filter_map(|(r, k)| {
                     let n = r.text().trim().to_string();
-                    (!n.is_empty()).then(|| Phone {
+                    let kind = PhoneKind::ALL
+                        .get(k.selected() as usize)
+                        .copied()
+                        .unwrap_or(PhoneKind::Other);
+                    // A custom label (from Google or Apple) stays while
+                    // the number and its kind do.
+                    let label = old_phones
+                        .iter()
+                        .find(|p| p.number == n && p.kind == kind)
+                        .map(|p| p.label.clone())
+                        .unwrap_or_default();
+                    (!n.is_empty()).then_some(Phone {
                         number: n,
-                        kind: PhoneKind::ALL
-                            .get(k.selected() as usize)
-                            .copied()
-                            .unwrap_or(PhoneKind::Other),
+                        kind,
+                        label,
                     })
                 })
                 .collect();
-            let old_kinds: Vec<(String, String)> = c
-                .emails
-                .iter()
-                .map(|e| (e.address.clone(), e.kind.clone()))
-                .collect();
+            let old_emails = std::mem::take(&mut c.emails);
             c.emails = email_rows
                 .borrow()
                 .iter()
                 .filter_map(|r| {
                     let a = r.text().trim().to_string();
+                    let old = old_emails.iter().find(|e| e.address == a);
                     (!a.is_empty()).then(|| Email {
-                        kind: old_kinds
-                            .iter()
-                            .find(|(x, _)| *x == a)
-                            .map(|(_, k)| k.clone())
-                            .unwrap_or_default(),
+                        kind: old.map(|e| e.kind.clone()).unwrap_or_default(),
+                        label: old.map(|e| e.label.clone()).unwrap_or_default(),
                         address: a,
                     })
                 })
@@ -443,6 +475,16 @@ impl Ui {
                             ui.show_contact(&u);
                         }
                     }
+                }
+                Err(omatel_contacts::Error::Conflict) => {
+                    // Another app or a sync tool rewrote the card: show
+                    // what is on disk now rather than overwrite it.
+                    tracing::info!("contact changed elsewhere; not saved");
+                    ui.toast("This contact changed elsewhere");
+                    ui.book.borrow_mut().reload_if_changed();
+                    ui.refresh_contacts_everywhere();
+                    ui.nav.pop();
+                    ui.reopen_contact(&c.uid);
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, "cannot save contact");

@@ -1143,7 +1143,7 @@ dependencies = [
 
 [[package]]
 name = "omaphone"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -1165,8 +1165,8 @@ dependencies = [
 
 [[package]]
 name = "omatel-api"
-version = "0.2.0"
-source = "git+https://github.com/derekross/omatel?tag=v0.2.0#301dae9f7167eb48b550c8230bd87ac5f684e1d5"
+version = "0.2.1"
+source = "git+https://github.com/derekross/omatel?tag=v0.2.1#4537d9114df519986e872bd1210ab53b313d15dd"
 dependencies = [
  "serde",
  "toml 0.9.12+spec-1.1.0",
@@ -1176,8 +1176,8 @@ dependencies = [
 
 [[package]]
 name = "omatel-contacts"
-version = "0.2.0"
-source = "git+https://github.com/derekross/omatel?tag=v0.2.0#301dae9f7167eb48b550c8230bd87ac5f684e1d5"
+version = "0.2.1"
+source = "git+https://github.com/derekross/omatel?tag=v0.2.1#4537d9114df519986e872bd1210ab53b313d15dd"
 dependencies = [
  "phonenumber",
  "thiserror",
@@ -1186,8 +1186,8 @@ dependencies = [
 
 [[package]]
 name = "omatel-mock"
-version = "0.2.0"
-source = "git+https://github.com/derekross/omatel?tag=v0.2.0#301dae9f7167eb48b550c8230bd87ac5f684e1d5"
+version = "0.2.1"
+source = "git+https://github.com/derekross/omatel?tag=v0.2.1#4537d9114df519986e872bd1210ab53b313d15dd"
 dependencies = [
  "anyhow",
  "clap",
@@ -1203,8 +1203,8 @@ dependencies = [
 
 [[package]]
 name = "omatel-store"
-version = "0.2.0"
-source = "git+https://github.com/derekross/omatel?tag=v0.2.0#301dae9f7167eb48b550c8230bd87ac5f684e1d5"
+version = "0.2.1"
+source = "git+https://github.com/derekross/omatel?tag=v0.2.1#4537d9114df519986e872bd1210ab53b313d15dd"
 dependencies = [
  "omatel-contacts",
  "rusqlite",
@@ -1216,8 +1216,8 @@ dependencies = [
 
 [[package]]
 name = "omatel-theme"
-version = "0.2.0"
-source = "git+https://github.com/derekross/omatel?tag=v0.2.0#301dae9f7167eb48b550c8230bd87ac5f684e1d5"
+version = "0.2.1"
+source = "git+https://github.com/derekross/omatel?tag=v0.2.1#4537d9114df519986e872bd1210ab53b313d15dd"
 dependencies = [
  "gtk4",
  "libadwaita",

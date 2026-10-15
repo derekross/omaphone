@@ -17,7 +17,7 @@ use gtk::{gio, glib};
 use gtk4 as gtk;
 use libadwaita as adw;
 use omatel_api::{CallInfo, Messages1Proxy, Phone1Proxy};
-use omatel_contacts::{number, AddressBook};
+use omatel_contacts::{number, vcard, AddressBook, ImportReport};
 use omatel_store::{BlockList, CallLog};
 
 use crate::script::{self, Step};
@@ -25,6 +25,20 @@ use crate::util;
 use crate::Cli;
 
 pub const APP_ID: &str = "org.omamobile.Phone";
+
+/// The empty Contacts tab's hint.
+pub const NO_CONTACTS_HINT: &str =
+    "Export a .vcf from Google Contacts or iCloud, then import it here.";
+
+/// Where to get a .vcf, shown before the file chooser.
+const IMPORT_HELP: &str = "Choose a .vcf file. To get one:\n\n\
+<b>Google Contacts</b>: on contacts.google.com, select the contacts (or none, for all), \
+then Export (in the menu ⋮ or the sidebar), choose vCard (for iOS Contacts) and Export.\n\n\
+<b>iCloud</b>: on icloud.com/contacts, select the contacts (Ctrl+A for all), \
+then the ⋯ (or gear) menu, Export vCard.\n\n\
+<b>iPhone or Mac</b>: in Contacts, select the contacts, then File, Export, Export vCard \
+(on a Mac), or share a contact as a card (on an iPhone).\n\n\
+Contacts already here are merged, not duplicated.";
 
 const EXTRA_CSS: &str = "
 .incall-page, .incoming-page { padding: 24px 16px; }
@@ -47,13 +61,25 @@ pub fn run() -> glib::ExitCode {
         if args.get(1).is_some_and(|a| a == "--") {
             args.remove(1);
         }
-        let cli = match Cli::try_parse_from(&args) {
+        let mut cli = match Cli::try_parse_from(&args) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("{e}");
                 return glib::ExitCode::FAILURE;
             }
         };
+        // Relative paths are relative to the launching process, which may
+        // not be this one.
+        if let Some(cwd) = cmdline.cwd() {
+            if let Some(p) = cli.import.take() {
+                cli.import = Some(cwd.join(p));
+            }
+            if let Some(u) = &cli.uri {
+                if let Some(p) = util::vcard_path(u).filter(|p| p.is_relative()) {
+                    cli.uri = Some(cwd.join(p).to_string_lossy().into_owned());
+                }
+            }
+        }
         let current = ui.borrow().clone();
         let ui = match current {
             Some(u) => u,
@@ -120,6 +146,10 @@ pub struct Ui {
     pub contacts_list: gtk::ListBox,
     pub contacts_search: gtk::SearchEntry,
     pub contacts_empty: adw::StatusPage,
+    /// "Import contacts…" on the empty Contacts tab.
+    pub contacts_empty_import: gtk::Button,
+    /// "Import contacts…" under the contacts list.
+    pub contacts_list_import: gtk::Button,
     pub contacts_stack: gtk::Stack,
     pub call: CallPage,
     pub incoming: IncomingPage,
@@ -144,7 +174,8 @@ pub struct Ui {
     pub recent_numbers: RefCell<Vec<String>>,
     pub contact_uids: RefCell<Vec<String>>,
     pub open_contact: RefCell<Option<String>>,
-    pub monitors: RefCell<Vec<gio::FileMonitor>>,
+    /// A monitor per watched address book directory.
+    pub monitors: RefCell<HashMap<PathBuf, gio::FileMonitor>>,
     /// Keeps the Omarchy theme followed.
     pub _theme: RefCell<Option<gio::FileMonitor>>,
     pub reload_pending: RefCell<Option<glib::SourceId>>,
@@ -211,10 +242,24 @@ impl Ui {
         let contacts_search = gtk::SearchEntry::builder()
             .placeholder_text("Search contacts")
             .build();
+        let contacts_empty_import = gtk::Button::builder()
+            .label("Import contacts…")
+            .css_classes(["pill", "suggested-action"])
+            .halign(gtk::Align::Center)
+            .action_name("app.import-vcf")
+            .build();
         let contacts_empty = adw::StatusPage::builder()
             .icon_name("avatar-default-symbolic")
-            .title("No contacts")
-            .description("Add one with the button above, or import a .vcf file from the menu.")
+            .title("No contacts yet")
+            .description(NO_CONTACTS_HINT)
+            .child(&contacts_empty_import)
+            .build();
+        let contacts_list_import = gtk::Button::builder()
+            .label("Import contacts…")
+            .css_classes(["pill"])
+            .halign(gtk::Align::Center)
+            .margin_top(18)
+            .action_name("app.import-vcf")
             .build();
 
         let ui = Rc::new(Ui {
@@ -236,6 +281,8 @@ impl Ui {
             contacts_list,
             contacts_search,
             contacts_empty,
+            contacts_empty_import,
+            contacts_list_import,
             contacts_stack: gtk::Stack::new(),
             call: build_call_page(),
             incoming: build_incoming_page(),
@@ -255,7 +302,7 @@ impl Ui {
             recent_numbers: RefCell::new(Vec::new()),
             contact_uids: RefCell::new(Vec::new()),
             open_contact: RefCell::new(None),
-            monitors: RefCell::new(Vec::new()),
+            monitors: RefCell::new(HashMap::new()),
             _theme: RefCell::new(theme),
             reload_pending: RefCell::new(None),
         });
@@ -392,7 +439,7 @@ impl Ui {
 
     fn handle(self: &Rc<Self>, cli: Cli) {
         if let Some(path) = &cli.import {
-            self.import_file(path);
+            self.import_file(path, false);
         }
         if cli.contacts {
             self.views.set_visible_child_name("contacts");
@@ -409,7 +456,10 @@ impl Ui {
             self.nav.pop_to_tag("root");
             self.edit_contact(None, Some(n.trim().to_string()));
         }
-        if let Some(uri) = &cli.uri {
+        if let Some(path) = cli.uri.as_deref().and_then(util::vcard_path) {
+            // A .vcf opened from a file manager or a browser's downloads.
+            self.import_file(&path, true);
+        } else if let Some(uri) = &cli.uri {
             match util::parse_dial_uri(uri) {
                 Some(n) => {
                     self.nav.pop_to_tag("root");
@@ -1102,15 +1152,23 @@ impl Ui {
 
     // ---- contacts on disk ------------------------------------------------------
 
-    /// Watch the address book's directories; reload after a burst settles.
+    /// Watch the address book's directories (the root and each book, as
+    /// the book lists them); reload after a burst settles, and watch any
+    /// book created since.
     fn watch_contacts(self: &Rc<Self>) {
-        let root = self.book.borrow().root().to_path_buf();
-        let mut dirs = vec![root.clone()];
-        if let Ok(rd) = std::fs::read_dir(&root) {
-            dirs.extend(rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()));
-        }
-        let mut monitors = Vec::new();
+        let dirs = self.book.borrow().watch_dirs();
+        let mut monitors = self.monitors.borrow_mut();
+        monitors.retain(|d, m| {
+            let keep = dirs.contains(d);
+            if !keep {
+                m.cancel();
+            }
+            keep
+        });
         for d in dirs {
+            if monitors.contains_key(&d) {
+                continue;
+            }
             let Ok(m) = gio::File::for_path(&d)
                 .monitor_directory(gio::FileMonitorFlags::WATCH_MOVES, gio::Cancellable::NONE)
             else {
@@ -1134,9 +1192,8 @@ impl Ui {
                 });
                 *ui.reload_pending.borrow_mut() = Some(id);
             });
-            monitors.push(m);
+            monitors.insert(d, m);
         }
-        *self.monitors.borrow_mut() = monitors;
     }
 
     pub fn refresh_contacts_everywhere(self: &Rc<Self>) {
@@ -1150,33 +1207,92 @@ impl Ui {
         self.refresh_contacts();
     }
 
-    pub fn import_file(self: &Rc<Self>, path: &Path) {
-        match std::fs::read_to_string(path) {
-            Ok(text) => {
-                let r = self.book.borrow_mut().import(&text);
-                match r {
-                    Ok(n) => {
-                        self.toast(&format!(
-                            "Imported {n} contact{}",
-                            if n == 1 { "" } else { "s" }
-                        ));
-                        tracing::info!(count = n, "contacts imported");
-                        self.refresh_contacts_everywhere();
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "import failed");
-                        self.toast("Couldn't import those contacts");
-                    }
-                }
-            }
+    /// Import a .vcf. With `confirm` (a file opened from a file manager
+    /// or a browser), ask first, saying how many cards it holds.
+    pub fn import_file(self: &Rc<Self>, path: &Path, confirm: bool) {
+        let text = match std::fs::read(path) {
+            Ok(bytes) => vcard::text_from_bytes(&bytes),
             Err(e) => {
                 tracing::warn!(error = %e, "import file unreadable");
                 self.toast("Couldn't read that file");
+                return;
+            }
+        };
+        let cards = vcard::count_cards(&text);
+        if cards == 0 {
+            self.toast("That file has no contacts");
+            return;
+        }
+        if !confirm {
+            self.import_text(&text);
+            return;
+        }
+        let file = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let dialog = adw::AlertDialog::new(
+            Some("Import contacts?"),
+            Some(&format!(
+                "{file} holds {cards} contact{}. Contacts already here are merged, not duplicated.",
+                if cards == 1 { "" } else { "s" }
+            )),
+        );
+        dialog.add_responses(&[("cancel", "Cancel"), ("import", "Import")]);
+        dialog.set_response_appearance("import", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("import"));
+        dialog.set_close_response("cancel");
+        let ui = self.clone();
+        dialog.connect_response(None, move |_, r| {
+            if r == "import" {
+                ui.import_text(&text);
+            }
+        });
+        self.top.set_visible_child_name("main");
+        self.views.set_visible_child_name("contacts");
+        dialog.present(Some(&self.window));
+    }
+
+    fn import_text(self: &Rc<Self>, text: &str) {
+        let r = self.book.borrow_mut().import(text);
+        match r {
+            Ok(r) => {
+                self.toast(&import_summary(&r));
+                self.refresh_contacts_everywhere();
+                self.watch_contacts();
+            }
+            Err(omatel_contacts::Error::Conflict) => {
+                tracing::warn!("import stopped: a contact changed elsewhere");
+                self.book.borrow_mut().reload_if_changed();
+                self.refresh_contacts_everywhere();
+                self.toast("A contact changed elsewhere; import again to finish");
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "import failed");
+                self.toast("Couldn't import those contacts");
             }
         }
     }
 
+    /// Where to get a .vcf, then the file chooser.
     fn import_dialog(self: &Rc<Self>) {
+        let dialog = adw::AlertDialog::new(Some("Import from Google or Apple"), None);
+        dialog.set_body(IMPORT_HELP);
+        dialog.set_body_use_markup(true);
+        dialog.add_responses(&[("cancel", "Cancel"), ("choose", "Choose file…")]);
+        dialog.set_response_appearance("choose", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("choose"));
+        dialog.set_close_response("cancel");
+        let ui = self.clone();
+        dialog.connect_response(None, move |_, r| {
+            if r == "choose" {
+                ui.choose_import_file();
+            }
+        });
+        dialog.present(Some(&self.window));
+    }
+
+    fn choose_import_file(self: &Rc<Self>) {
         let filter = gtk::FileFilter::new();
         filter.set_name(Some("Contacts (.vcf)"));
         filter.add_pattern("*.vcf");
@@ -1193,7 +1309,7 @@ impl Ui {
         dialog.open(Some(&self.window), gio::Cancellable::NONE, move |r| {
             if let Ok(f) = r {
                 if let Some(p) = f.path() {
-                    ui.import_file(&p);
+                    ui.import_file(&p, false);
                 }
             }
         });
@@ -1637,5 +1753,23 @@ fn build_incoming_page() -> IncomingPage {
         number,
         replies,
         replies_list,
+    }
+}
+
+/// "3 added, 1 merged, 2 skipped", leaving out what didn't happen.
+pub fn import_summary(r: &ImportReport) -> String {
+    let parts: Vec<String> = [
+        (r.added, "added"),
+        (r.merged, "merged"),
+        (r.skipped, "skipped"),
+    ]
+    .iter()
+    .filter(|(n, _)| *n > 0)
+    .map(|(n, what)| format!("{n} {what}"))
+    .collect();
+    if parts.is_empty() {
+        "No contacts imported".into()
+    } else {
+        format!("Contacts: {}", parts.join(", "))
     }
 }

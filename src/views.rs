@@ -78,8 +78,12 @@ impl Ui {
             .margin_top(8)
             .build();
         contacts.append(&search_clamp);
+        // The list, with "Import contacts…" under it.
+        let list_column = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        list_column.append(&self.contacts_list);
+        list_column.append(&self.contacts_list_import);
         self.contacts_stack
-            .add_named(&scrolled_column(&self.contacts_list), Some("list"));
+            .add_named(&scrolled_column(&list_column), Some("list"));
         self.contacts_stack
             .add_named(&self.contacts_empty, Some("empty"));
         self.contacts_stack.set_vexpand(true);
@@ -495,12 +499,14 @@ impl Ui {
         if found.is_empty() && !q.is_empty() {
             self.contacts_empty.set_title("No matches");
             self.contacts_empty.set_description(None);
+            self.contacts_empty_import.set_visible(false);
         } else {
-            self.contacts_empty.set_title("No contacts");
-            self.contacts_empty.set_description(Some(
-                "Add one with the button above, or import a .vcf file from the menu.",
-            ));
+            self.contacts_empty.set_title("No contacts yet");
+            self.contacts_empty
+                .set_description(Some(crate::app::NO_CONTACTS_HINT));
+            self.contacts_empty_import.set_visible(true);
         }
+        self.contacts_list_import.set_visible(q.is_empty());
         *self.contact_uids.borrow_mut() = uids;
     }
 }
