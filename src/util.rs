@@ -180,6 +180,61 @@ pub fn call_status(state: &str, talked_secs: Option<i64>) -> String {
     }
 }
 
+/// An input event, reduced to what decides whether the last input was touch.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum InputEvent {
+    /// A touch began, moved, ended or was canceled.
+    Touch,
+    /// The pointer entered the window at this position (surface coordinates).
+    PointerEnter(f64, f64),
+    /// A pointer motion at this position. Pointer events GTK emulates from
+    /// touch never get here.
+    PointerMotion(f64, f64),
+    /// A mouse or touchpad button press.
+    PointerPress,
+    /// Anything else (keys, scrolls): no change.
+    Other,
+}
+
+/// Whether the last real input was touch, so hover styling (which touch
+/// leaves behind under its last point) is turned off. Only a mouse that
+/// really moves turns it back on: GTK synthesizes a motion at the pointer's
+/// old position after every relayout (the on-screen keyboard showing or
+/// hiding resizes the window), and that one must not count.
+#[derive(Debug, Default)]
+pub struct TouchMode {
+    touch: bool,
+    last_pointer: Option<(f64, f64)>,
+}
+
+impl TouchMode {
+    pub fn is_touch(&self) -> bool {
+        self.touch
+    }
+
+    /// Feeds one event; true when `is_touch()` changed.
+    pub fn feed(&mut self, event: InputEvent) -> bool {
+        let before = self.touch;
+        match event {
+            InputEvent::Touch => self.touch = true,
+            InputEvent::PointerEnter(x, y) => self.last_pointer = Some((x, y)),
+            InputEvent::PointerMotion(x, y) => {
+                // A motion where the pointer already was is synthesized.
+                let moved = self
+                    .last_pointer
+                    .is_some_and(|(lx, ly)| (lx - x).abs() >= 1.0 || (ly - y).abs() >= 1.0);
+                if moved {
+                    self.touch = false;
+                }
+                self.last_pointer = Some((x, y));
+            }
+            InputEvent::PointerPress => self.touch = false,
+            InputEvent::Other => {}
+        }
+        self.touch != before
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,5 +352,35 @@ mod tests {
         assert_eq!(call_status("active", Some(65)), "1:05");
         assert_eq!(call_status("terminated", None), "Call ended");
         assert_eq!(call_status("weird", None), "Connecting…");
+    }
+
+    #[test]
+    fn touch_mode_ignores_synthesized_motion() {
+        let mut m = TouchMode::default();
+        assert!(!m.is_touch());
+        // A phantom pointer sits over the window, then the user touches.
+        assert!(!m.feed(InputEvent::PointerEnter(140.0, 730.0)));
+        assert!(m.feed(InputEvent::Touch));
+        // The keyboard hides, the window relayouts, and GTK synthesizes a
+        // motion where the pointer was: still touch.
+        assert!(!m.feed(InputEvent::PointerMotion(140.0, 730.0)));
+        assert!(m.is_touch());
+        assert!(!m.feed(InputEvent::Other));
+        assert!(m.is_touch());
+        // A mouse that moves turns hover back on.
+        assert!(m.feed(InputEvent::PointerMotion(160.0, 700.0)));
+        assert!(!m.is_touch());
+    }
+
+    #[test]
+    fn touch_mode_first_motion_and_presses() {
+        let mut m = TouchMode::default();
+        m.feed(InputEvent::Touch);
+        // A first motion with no known position may be synthesized too.
+        assert!(!m.feed(InputEvent::PointerMotion(10.0, 10.0)));
+        assert!(m.is_touch());
+        assert!(m.feed(InputEvent::PointerPress));
+        assert!(!m.is_touch());
+        assert!(m.feed(InputEvent::Touch));
     }
 }

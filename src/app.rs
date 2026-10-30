@@ -48,6 +48,15 @@ const EXTRA_CSS: &str = "
 .route-note { font-size: 12px; opacity: 0.7; }
 .call-button, .hangup-button { padding: 0; min-width: 76px; min-height: 76px; }
 .incall-toggle { padding: 0; }
+/* After touch, no hover or press look on the tabs that aren't selected:
+   GTK leaves :hover on the widget under the last touch point, or under a
+   pointer that never moved once the layout shifts, and on the tab bar it
+   looks like a second selected tab. See Ui::watch_touch. */
+window.touch-input viewswitcherbar button.toggle:not(:checked):hover,
+window.touch-input viewswitcherbar button.toggle:not(:checked):active {
+  background-color: transparent;
+  box-shadow: none;
+}
 ";
 
 pub fn run() -> glib::ExitCode {
@@ -346,6 +355,8 @@ impl Ui {
         toolbar.add_bottom_bar(&switcher);
 
         self.build_tabs();
+        tabs_keep_focus_off_click(&switcher);
+        self.watch_touch();
         let root = adw::NavigationPage::new(&toolbar, "Phone");
         root.set_tag(Some("root"));
         self.nav.add(&root);
@@ -368,6 +379,27 @@ impl Ui {
         self.views.set_visible_child_name("keypad");
         self.tab_changed();
         self.refresh_all();
+    }
+
+    /// Tracks whether the last input was touch and puts `touch-input` on
+    /// the window while it was, which turns off hover styling on the tab
+    /// bar (EXTRA_CSS). A mouse that moves turns it back on.
+    fn watch_touch(&self) {
+        let mode = RefCell::new(util::TouchMode::default());
+        let legacy = gtk::EventControllerLegacy::new();
+        legacy.set_propagation_phase(gtk::PropagationPhase::Capture);
+        let window = self.window.clone();
+        legacy.connect_event(move |_, event| {
+            if mode.borrow_mut().feed(input_event(event)) {
+                if mode.borrow().is_touch() {
+                    window.add_css_class("touch-input");
+                } else {
+                    window.remove_css_class("touch-input");
+                }
+            }
+            glib::Propagation::Proceed
+        });
+        self.window.add_controller(legacy);
     }
 
     fn add_actions(self: &Rc<Self>) {
@@ -1772,4 +1804,60 @@ pub fn import_summary(r: &ImportReport) -> String {
     } else {
         format!("Contacts: {}", parts.join(", "))
     }
+}
+
+/// A GDK event reduced to what `util::TouchMode` needs.
+fn input_event(event: &gtk::gdk::Event) -> util::InputEvent {
+    use gtk::gdk::{EventType, InputSource};
+    use util::InputEvent;
+    let touchscreen = event
+        .device()
+        .is_some_and(|d| d.source() == InputSource::Touchscreen);
+    let pos = event.position();
+    match event.event_type() {
+        EventType::TouchBegin
+        | EventType::TouchUpdate
+        | EventType::TouchEnd
+        | EventType::TouchCancel => InputEvent::Touch,
+        EventType::MotionNotify | EventType::ButtonPress | EventType::EnterNotify
+            if touchscreen || event.is_pointer_emulated() =>
+        {
+            InputEvent::Touch
+        }
+        EventType::EnterNotify => match pos {
+            Some((x, y)) => InputEvent::PointerEnter(x, y),
+            None => InputEvent::Other,
+        },
+        EventType::MotionNotify => match pos {
+            Some((x, y)) => InputEvent::PointerMotion(x, y),
+            None => InputEvent::Other,
+        },
+        EventType::ButtonPress => InputEvent::PointerPress,
+        _ => InputEvent::Other,
+    }
+}
+
+/// Tapping a tab doesn't move keyboard focus to it. Otherwise the tab keeps
+/// focus while the user types, and key events from the on-screen keyboard
+/// turn on :focus-visible, which draws the focus ring on it. The tabs stay
+/// focusable, so Tab and the arrow keys on a hardware keyboard still reach
+/// them. libadwaita's switcher buttons are private, so this walks the
+/// bar's widget tree for buttons (public GtkWidget API only); a libadwaita
+/// that builds the bar differently just keeps its default.
+fn tabs_keep_focus_off_click(bar: &adw::ViewSwitcherBar) {
+    fn walk(w: &gtk::Widget) -> usize {
+        let mut n = 0;
+        if w.is::<gtk::Button>() {
+            w.set_focus_on_click(false);
+            n += 1;
+        }
+        let mut child = w.first_child();
+        while let Some(c) = child {
+            n += walk(&c);
+            child = c.next_sibling();
+        }
+        n
+    }
+    let buttons = walk(bar.upcast_ref());
+    tracing::debug!(buttons, "tab buttons set not to take focus on click");
 }
