@@ -625,13 +625,7 @@ impl Ui {
             }
         });
 
-        let has = match zbus::fdo::DBusProxy::new(&conn).await {
-            Ok(d) => match zbus::names::BusName::try_from(omatel_api::PHONE_NAME) {
-                Ok(name) => d.name_has_owner(name).await.unwrap_or(false),
-                Err(_) => false,
-            },
-            Err(_) => false,
-        };
+        let has = activate_service(&conn).await;
         ui.service_changed(has).await;
     }
 
@@ -1860,4 +1854,28 @@ fn tabs_keep_focus_off_click(bar: &adw::ViewSwitcherBar) {
     }
     let buttons = walk(bar.upcast_ref());
     tracing::debug!(buttons, "tab buttons set not to take focus on click");
+}
+
+/// Ask the session bus to activate the Phone agent, then say whether its name
+/// has an owner.
+///
+/// The agent is D-Bus activatable (`SystemdService=omatel-agent.service`), so
+/// a user session where its unit was never enabled still gets it on demand:
+/// `StartServiceByName` starts the unit, which is what the agent's own
+/// activation file promises. Without this, a fresh install opened the app to
+/// "Phone service isn't running" although nothing was wrong beyond the unit
+/// being inactive. The banner stays for the real failure: the name still has no
+/// owner after activation was asked for, or activation itself failed.
+async fn activate_service(conn: &zbus::Connection) -> bool {
+    let Ok(dbus) = zbus::fdo::DBusProxy::new(conn).await else {
+        return false;
+    };
+    let Ok(name) = zbus::names::WellKnownName::try_from(omatel_api::PHONE_NAME) else {
+        return false;
+    };
+    match dbus.start_service_by_name(name.as_ref(), 0).await {
+        Ok(reply) => tracing::debug!(reply, "phone service activation"),
+        Err(e) => tracing::warn!(error = %e, "phone service activation failed"),
+    }
+    dbus.name_has_owner(name.into()).await.unwrap_or(false)
 }
