@@ -141,6 +141,7 @@ impl Ui {
                 let ui = self.clone();
                 let n = p.number.clone();
                 row.connect_activated(move |_| ui.show_details(&n));
+                copy_on_long_press(self, &row, &p.number);
                 g.add(&row);
             }
             content.append(&g);
@@ -665,4 +666,53 @@ impl Ui {
         let p = page("Blocked numbers", &content, &adw::HeaderBar::new());
         self.nav.push(&p);
     }
+}
+
+/// Hold a number row for two seconds to copy the number. A tap still
+/// opens the number, and moving the finger (scrolling) cancels the hold.
+pub(crate) fn copy_on_long_press(ui: &Rc<Ui>, row: &adw::ActionRow, raw: &str) {
+    const HOLD: std::time::Duration = std::time::Duration::from_millis(2000);
+    const SLOP: f64 = 12.0;
+    let drag = gtk::GestureDrag::new();
+    drag.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let timer: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
+    let stop = {
+        let timer = timer.clone();
+        move || {
+            if let Some(id) = timer.borrow_mut().take() {
+                id.remove();
+            }
+        }
+    };
+    {
+        let (timer, stop, ui, raw) = (timer.clone(), stop.clone(), ui.clone(), raw.to_string());
+        drag.connect_drag_begin(move |g, _, _| {
+            stop();
+            let (g, ui, raw, t) = (g.clone(), ui.clone(), raw.clone(), timer.clone());
+            let id = glib::timeout_add_local_once(HOLD, move || {
+                t.borrow_mut().take();
+                // Claim the touch so letting go doesn't also open the number.
+                g.set_state(gtk::EventSequenceState::Claimed);
+                if let Some(w) = g.widget() {
+                    w.clipboard().set_text(&raw);
+                }
+                ui.toast("Number copied");
+            });
+            *timer.borrow_mut() = Some(id);
+        });
+    }
+    {
+        let stop = stop.clone();
+        drag.connect_drag_update(move |_, x, y| {
+            if x.abs() > SLOP || y.abs() > SLOP {
+                stop();
+            }
+        });
+    }
+    {
+        let stop = stop.clone();
+        drag.connect_drag_end(move |_, _, _| stop());
+    }
+    drag.connect_cancel(move |_, _| stop());
+    row.add_controller(drag);
 }

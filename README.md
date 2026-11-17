@@ -26,7 +26,8 @@ omatel's shared crates, pinned to an omatel release tag.
   are tabs.
 - Contacts: search, a contact page, an editor (name, numbers with labels,
   emails, a note, favorite), importing and exporting `.vcf` files, and
-  blocking. Import takes Google's and Apple's exports and merges
+  blocking. Hold a number for two seconds, in any list or on a contact's
+  page, to copy it. Import takes Google's and Apple's exports and merges
   duplicates (see below).
 - The in-call screen: a call timer, mute, speaker, a keypad for touch
   tones, and hang up. The answer screen offers Answer, Decline and Reply

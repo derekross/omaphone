@@ -10,6 +10,7 @@ use libadwaita as adw;
 use omatel_contacts::number;
 
 use crate::app::{build_dialpad, Ui};
+use crate::pages::copy_on_long_press;
 use crate::util;
 
 /// A list page: a scrolled, clamped column.
@@ -358,6 +359,7 @@ impl Ui {
                 let n = raw.clone();
                 call.connect_clicked(move |_| ui.dial(&n));
                 row.add_suffix(&call);
+                copy_on_long_press(self, &row, &raw);
                 let ui = self.clone();
                 row.connect_activated(move |_| ui.show_details(&raw));
                 list.append(&row);
@@ -429,6 +431,7 @@ impl Ui {
                 let ui = self.clone();
                 let n = c.raw_number.clone();
                 row.connect_activated(move |_| ui.show_details(&n));
+                copy_on_long_press(self, &row, &c.raw_number);
                 numbers.push(c.raw_number.clone());
                 list.append(&row);
             }
@@ -462,6 +465,7 @@ impl Ui {
             }
             if let Some(p) = c.phones.first() {
                 row.set_subtitle(&number::display(&p.number, &self.region));
+                copy_on_long_press(self, &row, &p.number);
             }
             row.add_prefix(&avatar(Some(&name), 40));
             if c.starred() {
