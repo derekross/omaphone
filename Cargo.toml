@@ -1,6 +1,6 @@
 [package]
 name = "omaphone"
-description = "Phone: dialpad, call log, favorites, contacts and the in-call screen for Omarchy Mobile"
+description = "Phone: dialpad, call log, favorites, contacts and the in-call screen for Omamobile"
 version = "0.2.3"
 edition = "2021"
 license = "GPL-3.0-or-later"

@@ -1,6 +1,6 @@
 # Maintainer: Derek Ross <derekross@gmail.com>
 #
-# Builds omaphone from this checkout. Omarchy Mobile's packages/omaphone builds a
+# Builds omaphone from this checkout. Omamobile's packages/omaphone builds a
 # pinned release the same way.
 pkgname=omaphone
 pkgver=$(sed -n 's/^version = "\(.*\)"/\1/p' "$startdir/../Cargo.toml" | head -1)
