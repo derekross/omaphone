@@ -1,6 +1,6 @@
 # omaphone
 
-omaphone is Omarchy Mobile's **Phone** app. It is laid out for a phone held
+omaphone is Omamobile's **Phone** app. It is laid out for a phone held
 upright (480 logical pixels wide) and follows your Omarchy theme. It
 behaves like AOSP's Dialer app; none of AOSP's code is used.
 
@@ -35,13 +35,13 @@ omatel's shared crates, pinned to an omatel release tag.
   **Contacts** launcher entry opens the Contacts tab.
 
 Not yet: call audio routing (speaker and mute reach the phone's audio once
-Omarchy Mobile's call audio work lands; the in-call screen says so), hold,
+Omamobile's call audio work lands; the in-call screen says so), hold,
 swap and conference calls, visual voicemail, contact photos (initials
 only), and emergency calls.
 
 ## Install
 
-On Omarchy Mobile, install the `omaphone` package; it brings in
+On Omamobile, install the `omaphone` package; it brings in
 `omatel-agent`. Start the agent once for your user:
 
 ```

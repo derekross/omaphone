@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! omaphone: the phone app of Omarchy Mobile, shown as "Phone": dialpad
+//! omaphone: the phone app of Omamobile, shown as "Phone": dialpad
 //! with smart dial, call log, favorites, contacts, and the in-call and
 //! answer screens. Calls go through omatel-agent's org.omamobile.Phone1.
 
@@ -13,7 +13,7 @@ use clap::Parser;
 use gtk4 as gtk;
 
 #[derive(Debug, Clone, Default, Parser)]
-#[command(name = "omaphone", version, about = "Phone for Omarchy Mobile")]
+#[command(name = "omaphone", version, about = "Phone for Omamobile")]
 pub struct Cli {
     /// A `tel:` or `callto:` URI (or a number): opens the dialpad with it
     /// filled in. Nothing is dialled until you press call. A `.vcf` file
